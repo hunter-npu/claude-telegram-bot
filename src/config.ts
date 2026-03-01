@@ -52,6 +52,14 @@ export interface McpHttpServer {
 
 export type McpServerConfig = McpStdioServer | McpHttpServer;
 
+export interface AgentConfig {
+  description: string;
+  prompt: string;
+  tools?: string[];
+  disallowedTools?: string[];
+  model?: "sonnet" | "opus" | "haiku" | "inherit";
+}
+
 export interface CctExtendedConfig {
   /** Which Claude Code settings to load: "user", "project", "local" */
   settingSources: string[];
@@ -59,6 +67,8 @@ export interface CctExtendedConfig {
   plugins: PluginConfig[];
   /** Additional MCP servers */
   mcpServers: Record<string, McpServerConfig>;
+  /** Custom agent definitions for /team command */
+  agents: Record<string, AgentConfig>;
 }
 
 export function loadExtendedConfig(): CctExtendedConfig {
@@ -66,6 +76,7 @@ export function loadExtendedConfig(): CctExtendedConfig {
     settingSources: ["user", "project", "local"],
     plugins: [],
     mcpServers: {},
+    agents: {},
   };
 
   const configPath = resolve(BOT_DIR, "cct.config.json");
@@ -76,6 +87,7 @@ export function loadExtendedConfig(): CctExtendedConfig {
       settingSources: parsed.settingSources ?? defaults.settingSources,
       plugins: parsed.plugins ?? defaults.plugins,
       mcpServers: parsed.mcpServers ?? defaults.mcpServers,
+      agents: parsed.agents ?? defaults.agents,
     };
   } catch {
     // No config file or invalid JSON — use defaults

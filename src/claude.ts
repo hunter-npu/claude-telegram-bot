@@ -1,7 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionHandler } from "./permissions.js";
 import type { SessionManager } from "./session.js";
-import { config, loadExtendedConfig } from "./config.js";
+import { config, loadExtendedConfig, type AgentConfig } from "./config.js";
 import { logConsole } from "./console.js";
 import {
   formatToolCall,
@@ -23,6 +23,8 @@ export interface ExecuteParams {
   flush: () => Promise<void>;
   /** If set, resume an existing session instead of starting a new one */
   resumeSessionId?: string;
+  /** If set, pass agent definitions for team mode */
+  agents?: Record<string, AgentConfig>;
 }
 
 export interface ExecuteResult {
@@ -82,6 +84,15 @@ export class ClaudeAgent {
       }
       if (params.resumeSessionId) {
         options.resume = params.resumeSessionId;
+      }
+
+      // Merge agents from config + params
+      const agents: Record<string, AgentConfig> = {
+        ...ext.agents,
+        ...params.agents,
+      };
+      if (Object.keys(agents).length > 0) {
+        options.agents = agents;
       }
 
       const stream = query({

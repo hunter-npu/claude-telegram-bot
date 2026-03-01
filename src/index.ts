@@ -1,3 +1,7 @@
+// Process-level exception handlers — keep the bot alive on unexpected errors
+process.on("uncaughtException", (err) => console.error("[uncaughtException]", err));
+process.on("unhandledRejection", (reason) => console.error("[unhandledRejection]", reason));
+
 import { Telegraf } from "telegraf";
 import { config, validateConfig } from "./config.js";
 import { PermissionHandler } from "./permissions.js";
@@ -25,9 +29,20 @@ async function main(): Promise<void> {
   // 3. Wire up Telegram bot commands and middleware
   setupBot(bot, claudeAgent, sessionManager);
 
+  // Global Telegraf error handler
+  bot.catch((err) =>
+    logConsole(`[Telegraf error] ${err instanceof Error ? err.message : String(err)}`)
+  );
+
   // 4. Graceful shutdown
+  // Keepalive — ping Telegram every 5 minutes to prevent NAT/firewall timeouts
+  const keepaliveTimer = setInterval(() => {
+    bot.telegram.getMe().catch((err: Error) => logConsole(`[Keepalive] ${err.message}`));
+  }, 5 * 60 * 1000);
+
   const shutdown = (signal: string) => {
     logConsole(`\n\u{1f6d1} Received ${signal}, shutting down\u{2026}`);
+    clearInterval(keepaliveTimer);
     permissionHandler.cleanup();
     rl.close();
     bot.stop(signal);
@@ -41,6 +56,10 @@ async function main(): Promise<void> {
     { command: "start", description: "Welcome & show help" },
     { command: "ask", description: "Send a new task to Claude" },
     { command: "chat", description: "Continue current session" },
+    { command: "new", description: "Reset & start a new task" },
+    { command: "team", description: "Run task with agent team" },
+    { command: "reset", description: "Clear current session" },
+    { command: "switch", description: "Switch to a previous session" },
     { command: "status", description: "View current session status" },
     { command: "cancel", description: "Cancel running task" },
     { command: "sessions", description: "List past sessions" },
@@ -83,6 +102,30 @@ async function main(): Promise<void> {
             ? ` | Session: ${current.id.slice(0, 8)}... | Task: ${current.prompt.slice(0, 80)}`
             : " | No active session")
       );
+      rl.prompt();
+      return;
+    }
+
+    if (input.toLowerCase() === "reset") {
+      sessionManager.clearCurrent();
+      logConsole("Session cleared. Next input starts a fresh conversation.");
+      rl.prompt();
+      return;
+    }
+
+    if (input.toLowerCase().startsWith("switch ")) {
+      const prefix = input.slice(7).trim();
+      if (!prefix) {
+        logConsole("Usage: switch <id-prefix>");
+      } else {
+        const session = sessionManager.findByPrefix(prefix);
+        if (session) {
+          sessionManager.setCurrent(session.id, session.prompt);
+          logConsole(`Switched to session ${session.id.slice(0, 8)}. Type a message to continue.`);
+        } else {
+          logConsole(`No session found matching "${prefix}". Type 'sessions' to list.`);
+        }
+      }
       rl.prompt();
       return;
     }

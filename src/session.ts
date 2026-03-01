@@ -37,4 +37,10 @@ export class SessionManager {
   getById(id: string): SessionRecord | undefined {
     return this.sessions.find((s) => s.id === id);
   }
+
+  /** Find a session whose ID starts with the given prefix */
+  findByPrefix(prefix: string): SessionRecord | undefined {
+    const matches = this.sessions.filter((s) => s.id.startsWith(prefix));
+    return matches.length === 1 ? matches[0] : undefined;
+  }
 }

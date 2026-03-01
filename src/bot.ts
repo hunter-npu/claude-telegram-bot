@@ -1,7 +1,7 @@
 import type { Telegraf } from "telegraf";
 import type { ClaudeAgent } from "./claude.js";
 import type { SessionManager } from "./session.js";
-import { config } from "./config.js";
+import { config, type AgentConfig } from "./config.js";
 import { escapeHtml, splitMessage } from "./formatter.js";
 import { logConsole } from "./console.js";
 
@@ -136,12 +136,13 @@ function runTask(
   chatId: number,
   claudeAgent: ClaudeAgent,
   prompt: string,
-  resumeSessionId?: string
+  resumeSessionId?: string,
+  agents?: Record<string, AgentConfig>
 ): void {
   const { sendUpdate, flush } = createDualSender(bot, chatId);
 
   claudeAgent
-    .execute({ prompt, sendUpdate, flush, resumeSessionId })
+    .execute({ prompt, sendUpdate, flush, resumeSessionId, agents })
     .then((result) => {
       if (result.error) {
         sendTelegram(
@@ -190,6 +191,10 @@ export function setupBot(
         "Available commands:\n" +
         "/ask &lt;prompt&gt; \u{2014} Send a task to Claude\n" +
         "/chat &lt;message&gt; \u{2014} Continue the current session\n" +
+        "/new &lt;prompt&gt; \u{2014} Reset session and start a new task\n" +
+        "/team &lt;prompt&gt; \u{2014} Run task with agent team\n" +
+        "/reset \u{2014} Clear current session\n" +
+        "/switch &lt;id&gt; \u{2014} Switch to a previous session\n" +
         "/status \u{2014} View current session info\n" +
         "/cancel \u{2014} Cancel a running task\n" +
         "/sessions \u{2014} List past sessions\n\n" +
@@ -275,7 +280,83 @@ export function setupBot(
       const mark = s.id === current?.id ? " \u{1f448}" : "";
       text += `<code>${s.id.slice(0, 8)}</code> \u{2014} ${escapeHtml(s.prompt.slice(0, 60))}${mark}\n`;
     }
+    text += "\nUse /switch &lt;id&gt; to resume a session.";
     await ctx.reply(text, { parse_mode: "HTML" });
+  });
+
+  // ---- /reset ----
+  bot.command("reset", async (ctx) => {
+    sessionManager.clearCurrent();
+    await ctx.reply("Session cleared. Next message starts a fresh conversation.");
+  });
+
+  // ---- /new ----
+  bot.command("new", async (ctx) => {
+    const prompt = ctx.message.text.replace(/^\/new\s*/, "").trim();
+    if (!prompt) {
+      await ctx.reply("Usage: /new &lt;prompt&gt;", { parse_mode: "HTML" });
+      return;
+    }
+    if (claudeAgent.running) {
+      await ctx.reply("\u{23f3} A task is already running. /cancel to abort.");
+      return;
+    }
+
+    logConsole(`\n\x1b[1m[Telegram] /new ${prompt}\x1b[0m`);
+    sessionManager.clearCurrent();
+    await ctx.reply("\u{1f504} Starting fresh\u{2026}");
+    runTask(bot, ctx.chat.id, claudeAgent, prompt);
+  });
+
+  // ---- /switch ----
+  bot.command("switch", async (ctx) => {
+    const idPrefix = ctx.message.text.replace(/^\/switch\s*/, "").trim();
+    if (!idPrefix) {
+      await ctx.reply("Usage: /switch &lt;id-prefix&gt;", { parse_mode: "HTML" });
+      return;
+    }
+    const session = sessionManager.findByPrefix(idPrefix);
+    if (!session) {
+      await ctx.reply(`No session found matching <code>${escapeHtml(idPrefix)}</code>. Use /sessions to list.`, { parse_mode: "HTML" });
+      return;
+    }
+    sessionManager.setCurrent(session.id, session.prompt);
+    await ctx.reply(
+      `Switched to session <code>${session.id.slice(0, 8)}</code>. Use /chat to continue.`,
+      { parse_mode: "HTML" }
+    );
+  });
+
+  // ---- /team ----
+  bot.command("team", async (ctx) => {
+    const prompt = ctx.message.text.replace(/^\/team\s*/, "").trim();
+    if (!prompt) {
+      await ctx.reply("Usage: /team &lt;prompt&gt;", { parse_mode: "HTML" });
+      return;
+    }
+    if (claudeAgent.running) {
+      await ctx.reply("\u{23f3} A task is already running. /cancel to abort.");
+      return;
+    }
+
+    const defaultAgents: Record<string, AgentConfig> = {
+      researcher: {
+        description: "Research agent for searching code, reading files, and gathering information",
+        prompt: "You are a research assistant. Search the codebase, read files, and gather information to answer questions. Do not modify any files.",
+        tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"],
+        model: "sonnet",
+      },
+      coder: {
+        description: "Coding agent for writing and editing code",
+        prompt: "You are a coding assistant. Write, edit, and create code files as needed to complete tasks.",
+        model: "sonnet",
+      },
+    };
+
+    logConsole(`\n\x1b[1m[Telegram] /team ${prompt}\x1b[0m`);
+    sessionManager.clearCurrent();
+    await ctx.reply("\u{1f504} Starting with agent team\u{2026}");
+    runTask(bot, ctx.chat.id, claudeAgent, prompt, undefined, defaultAgents);
   });
 
   // ---- Plain text → smart routing ----
