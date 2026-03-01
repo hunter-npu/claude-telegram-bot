@@ -8,7 +8,7 @@ import { logConsole } from "./console.js";
 
 type PermissionAllow = {
   behavior: "allow";
-  updatedInput?: Record<string, unknown>;
+  updatedInput: Record<string, unknown>;
 };
 
 type PermissionDeny = {
@@ -56,6 +56,8 @@ interface QuestionDef {
 interface PendingRequest {
   resolve: (result: PermissionResult) => void;
   type: "permission" | "question";
+  /** Original tool input — needed so we can return it as updatedInput on allow */
+  input: Record<string, unknown>;
   context?: {
     input: Record<string, unknown>;
     questions: QuestionDef[];
@@ -127,7 +129,7 @@ export class PermissionHandler {
       this.latestPendingId = null;
       if (allow) {
         logConsole("\x1b[32m  \u{2705} Allowed\x1b[0m");
-        req.resolve({ behavior: "allow" });
+        req.resolve({ behavior: "allow", updatedInput: req.input });
       } else {
         logConsole("\x1b[31m  \u{274c} Denied\x1b[0m");
         req.resolve({ behavior: "deny", message: "User denied from console" });
@@ -177,7 +179,7 @@ export class PermissionHandler {
       if (this.latestPendingId === id) this.latestPendingId = null;
 
       if (action === "a") {
-        req.resolve({ behavior: "allow" });
+        req.resolve({ behavior: "allow", updatedInput: req.input });
         logConsole("\x1b[32m  \u{2705} Allowed (via Telegram)\x1b[0m");
         await ctx.answerCbQuery("\u{2705} Allowed");
       } else {
@@ -248,7 +250,7 @@ export class PermissionHandler {
   ): Promise<PermissionResult> => {
     // Auto-allow read-only / non-destructive tools
     if (AUTO_ALLOW.has(toolName)) {
-      return { behavior: "allow" };
+      return { behavior: "allow", updatedInput: input };
     }
 
     // AskUserQuestion → render as Telegram inline keyboard + console
@@ -328,7 +330,7 @@ export class PermissionHandler {
 
     this.latestPendingId = id;
     return new Promise<PermissionResult>((resolve) => {
-      this.pending.set(id, { resolve, type: "permission" });
+      this.pending.set(id, { resolve, type: "permission", input });
     });
   }
 
@@ -340,7 +342,7 @@ export class PermissionHandler {
   ): Promise<PermissionResult> {
     const questions = input.questions as QuestionDef[] | undefined;
     if (!questions || questions.length === 0) {
-      return { behavior: "allow" };
+      return { behavior: "allow", updatedInput: input };
     }
 
     const id = this.shortId(toolUseID);
@@ -378,6 +380,7 @@ export class PermissionHandler {
       this.pending.set(id, {
         resolve,
         type: "question",
+        input,
         context: { input, questions, answers: {} },
       });
     });
