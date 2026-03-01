@@ -1,0 +1,22 @@
+{
+  "name": "claude-telegram-bot",
+  "version": "1.0.0",
+  "description": "Telegram Bot for remote interaction with Claude Code via Agent SDK",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "dotenv": "^16.4.0",
+    "telegraf": "^4.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

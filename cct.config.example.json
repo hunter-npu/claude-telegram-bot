@@ -1,0 +1,5 @@
+{
+  "settingSources": ["user", "project", "local"],
+  "plugins": [],
+  "mcpServers": {}
+}
