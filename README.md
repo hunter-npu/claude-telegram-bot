@@ -13,47 +13,80 @@ A Telegram bot that lets you interact with [Claude Code](https://docs.anthropic.
 
 ## Prerequisites
 
-- **Node.js** 20+
-- **Claude Code** CLI installed and logged in (`claude --version`)
-- A **Telegram Bot Token** from [@BotFather](https://t.me/BotFather)
-- Your **Telegram User ID** (get it from [@userinfobot](https://t.me/userinfobot))
+- **Node.js** 20+ — [download](https://nodejs.org/)
+- **Claude Code** CLI installed and logged in — [install guide](https://docs.anthropic.com/en/docs/claude-code)
+- A **Telegram Bot Token** — create one via [@BotFather](https://t.me/BotFather) on Telegram
+- Your **Telegram User ID** — get it from [@userinfobot](https://t.me/userinfobot) on Telegram
 
-## Setup
+## Quick Start (One-Click Setup)
 
-1. Clone the repo and install dependencies:
+### Windows
+
+```cmd
+git clone https://github.com/hunter-npu/claude-telegram-bot.git
+cd claude-telegram-bot
+setup.bat
+```
+
+### macOS / Linux
 
 ```bash
-git clone https://github.com/your-username/claude-telegram-bot.git
+git clone https://github.com/hunter-npu/claude-telegram-bot.git
+cd claude-telegram-bot
+chmod +x setup.sh
+./setup.sh
+```
+
+The setup script will:
+1. Check that Node.js 20+ and Claude Code CLI are installed
+2. Run `npm install` to download all dependencies
+3. Prompt you for your **Telegram Bot Token** and **User ID**, then create the `.env` config file
+
+Once setup is complete, start the bot:
+
+```cmd
+cct.bat          &REM Windows — working directory = wherever you run this from
+```
+```bash
+npx tsx src/index.ts   # macOS / Linux
+```
+
+## Manual Setup
+
+If you prefer to configure manually:
+
+1. Clone and install:
+
+```bash
+git clone https://github.com/hunter-npu/claude-telegram-bot.git
 cd claude-telegram-bot
 npm install
 ```
 
-2. Copy `.env.example` to `.env` and fill in your values:
+2. Create a `.env` file (copy from the template):
 
 ```bash
 cp .env.example .env
 ```
 
+3. Edit `.env` and fill in your values:
+
 | Variable | Required | Description |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | Yes | Bot token from @BotFather |
+| `TELEGRAM_BOT_TOKEN` | Yes | Bot token from [@BotFather](https://t.me/BotFather) |
 | `ALLOWED_USER_ID` | Yes | Your Telegram numeric user ID |
-| `ANTHROPIC_API_KEY` | No | Not needed for Claude Max subscribers |
+| `ANTHROPIC_API_KEY` | No | Not needed for [Claude Max](https://claude.ai) subscribers (SDK uses CLI login) |
 | `WORKING_DIRECTORY` | No | Defaults to the directory where you launch the bot |
 
-3. Run the bot:
+4. Start the bot:
 
 ```bash
 npx tsx src/index.ts
 ```
 
-Or on Windows, use the provided batch file — the working directory will be wherever you run it from:
+## Usage
 
-```cmd
-cct.bat
-```
-
-## Telegram Commands
+### Telegram Commands
 
 | Command | Description |
 |---|---|
@@ -66,17 +99,30 @@ cct.bat
 
 You can also send plain text directly — it will continue the current session or start a new one.
 
-## Console Commands
+### Console Commands
 
 While the bot is running, you can also type directly in the terminal:
 
-- Any text → sent as a prompt (continues current session if one exists)
-- `cancel` → abort the running task
-- `status` → show current session info
-- `sessions` → list recent sessions
-- `y` / `n` → approve or deny a pending permission request
+| Input | Action |
+|---|---|
+| Any text | Send as a prompt (continues current session if active) |
+| `cancel` | Abort the running task |
+| `status` | Show current session info |
+| `sessions` | List recent sessions |
+| `y` / `n` | Approve or deny a pending permission request |
 
-## Configuration (optional)
+### Permission Approval
+
+When Claude requests a write operation (editing files, running shell commands, etc.), you'll see an approval prompt with **Allow / Deny** buttons in Telegram:
+
+> **Permission Request**
+> Tool: Bash
+> Command: `npm test`
+> [ Allow ] [ Deny ]
+
+You can approve from either Telegram (tap the button) or the console (type `y`).
+
+## Advanced Configuration
 
 Create `cct.config.json` in the bot directory to load additional plugins or MCP servers:
 
