@@ -42,14 +42,16 @@ The setup script will:
 2. Run `npm install` to download all dependencies
 3. Prompt you for your **Telegram Bot Token** and **User ID**, then create the `.env` config file
 
-Once setup is complete, start the bot:
+Once setup is complete, `cd` into your project directory and start the bot:
 
 ```cmd
-cct.bat          &REM Windows — working directory = wherever you run this from
+cct.bat                &REM Windows
 ```
 ```bash
-npx tsx src/index.ts   # macOS / Linux
+./cct.sh               # macOS / Linux (chmod +x cct.sh if needed)
 ```
+
+Both scripts capture the **current working directory** as Claude's workspace, then launch the bot from the script's own directory. This means you can place the bot repo anywhere and run `cct.bat` / `cct.sh` from whichever project folder you want Claude to work on.
 
 ## Manual Setup
 
@@ -78,7 +80,16 @@ cp .env.example .env
 | `ANTHROPIC_API_KEY` | No | Not needed for [Claude Max](https://claude.ai) subscribers (SDK uses CLI login) |
 | `WORKING_DIRECTORY` | No | Defaults to the directory where you launch the bot |
 
-4. Start the bot:
+4. Start the bot from your project directory:
+
+```cmd
+path\to\claude-telegram-bot\cct.bat          &REM Windows
+```
+```bash
+/path/to/claude-telegram-bot/cct.sh          # macOS / Linux
+```
+
+Or launch directly (working directory = current directory):
 
 ```bash
 npx tsx src/index.ts
@@ -93,6 +104,10 @@ npx tsx src/index.ts
 | `/start` | Welcome message and command list |
 | `/ask <prompt>` | Start a new task |
 | `/chat <message>` | Continue the current session |
+| `/new <prompt>` | Clear session and start a new task in one step |
+| `/team <prompt>` | Run a task with an agent team (researcher + coder) |
+| `/reset` | Clear current session (next message starts fresh) |
+| `/switch <id>` | Switch to a previous session by ID prefix |
 | `/status` | View current session info |
 | `/cancel` | Cancel a running task |
 | `/sessions` | List recent sessions |
@@ -108,6 +123,8 @@ While the bot is running, you can also type directly in the terminal:
 | Any text | Send as a prompt (continues current session if active) |
 | `cancel` | Abort the running task |
 | `status` | Show current session info |
+| `reset` | Clear current session |
+| `switch <id>` | Switch to a previous session by ID prefix |
 | `sessions` | List recent sessions |
 | `y` / `n` | Approve or deny a pending permission request |
 
@@ -124,17 +141,24 @@ You can approve from either Telegram (tap the button) or the console (type `y`).
 
 ## Advanced Configuration
 
-Create `cct.config.json` in the bot directory to load additional plugins or MCP servers:
+Create `cct.config.json` in the bot directory to load additional plugins, MCP servers, or custom agents:
 
 ```json
 {
   "settingSources": ["user", "project", "local"],
   "plugins": [],
-  "mcpServers": {}
+  "mcpServers": {},
+  "agents": {}
 }
 ```
 
-See `cct.config.example.json` for reference.
+See `cct.config.example.json` for reference, or check the [docs/](docs/) folder for detailed documentation:
+
+- [Architecture](docs/architecture.md) — System design and module overview
+- [Commands](docs/commands.md) — Full command reference with examples
+- [Configuration](docs/configuration.md) — All config options explained
+- [Changelog](docs/changelog.md) — Version history and what changed
+- [Design Rationale](docs/design-rationale.md) — Why things are built this way
 
 ## Architecture
 
