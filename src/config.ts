@@ -15,6 +15,9 @@ export const config = {
   allowedUserId: Number(process.env.ALLOWED_USER_ID) || 0,
   workingDirectory:
     process.env.WORKING_DIRECTORY || process.env.CCT_WORK_DIR || process.cwd(),
+  /** HTTPS proxy URL for Telegram API access (e.g. http://127.0.0.1:7890) */
+  httpsProxy:
+    process.env.HTTPS_PROXY || process.env.https_proxy || "",
 };
 
 export function validateConfig(): void {
@@ -70,6 +73,24 @@ export interface CctExtendedConfig {
   /** Custom agent definitions for /team command */
   agents: Record<string, AgentConfig>;
 }
+
+// ---------------------------------------------------------------------------
+// Default agent team for /team command (shared between bot.ts and index.ts)
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_TEAM_AGENTS: Record<string, AgentConfig> = {
+  researcher: {
+    description: "Research agent for searching code, reading files, and gathering information",
+    prompt: "You are a research assistant. Search the codebase, read files, and gather information to answer questions. Do not modify any files.",
+    tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"],
+    model: "sonnet",
+  },
+  coder: {
+    description: "Coding agent for writing and editing code",
+    prompt: "You are a coding assistant. Write, edit, and create code files as needed to complete tasks.",
+    model: "sonnet",
+  },
+};
 
 export function loadExtendedConfig(): CctExtendedConfig {
   const defaults: CctExtendedConfig = {

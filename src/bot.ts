@@ -1,7 +1,7 @@
 import type { Telegraf } from "telegraf";
 import type { ClaudeAgent } from "./claude.js";
 import type { SessionManager } from "./session.js";
-import { config, type AgentConfig } from "./config.js";
+import { config, DEFAULT_TEAM_AGENTS, type AgentConfig } from "./config.js";
 import { escapeHtml, splitMessage } from "./formatter.js";
 import { logConsole } from "./console.js";
 
@@ -103,14 +103,14 @@ class TelegramBatcher {
 // DualSender — console (immediate) + Telegram (batched)
 // ---------------------------------------------------------------------------
 
-export interface DualSender {
+interface DualSender {
   /** Log to console immediately AND queue for Telegram */
   sendUpdate: (text: string, parseMode?: "HTML" | "text") => void;
   /** Flush the Telegram buffer right now */
   flush: () => Promise<void>;
 }
 
-export function createDualSender(
+function createDualSender(
   bot: Telegraf,
   chatId: number
 ): DualSender {
@@ -197,7 +197,9 @@ export function setupBot(
         "/switch &lt;id&gt; \u{2014} Switch to a previous session\n" +
         "/status \u{2014} View current session info\n" +
         "/cancel \u{2014} Cancel a running task\n" +
-        "/sessions \u{2014} List past sessions\n\n" +
+        "/sessions \u{2014} List past sessions\n" +
+        "/model [name] \u{2014} Show or switch model\n" +
+        "/exit \u{2014} Shut down the bot\n\n" +
         "You can also send plain text directly.",
       { parse_mode: "HTML" }
     );
@@ -339,24 +341,58 @@ export function setupBot(
       return;
     }
 
-    const defaultAgents: Record<string, AgentConfig> = {
-      researcher: {
-        description: "Research agent for searching code, reading files, and gathering information",
-        prompt: "You are a research assistant. Search the codebase, read files, and gather information to answer questions. Do not modify any files.",
-        tools: ["Read", "Grep", "Glob", "Bash", "WebSearch", "WebFetch"],
-        model: "sonnet",
-      },
-      coder: {
-        description: "Coding agent for writing and editing code",
-        prompt: "You are a coding assistant. Write, edit, and create code files as needed to complete tasks.",
-        model: "sonnet",
-      },
-    };
-
     logConsole(`\n\x1b[1m[Telegram] /team ${prompt}\x1b[0m`);
     sessionManager.clearCurrent();
     await ctx.reply("\u{1f504} Starting with agent team\u{2026}");
-    runTask(bot, ctx.chat.id, claudeAgent, prompt, undefined, defaultAgents);
+    runTask(bot, ctx.chat.id, claudeAgent, prompt, undefined, DEFAULT_TEAM_AGENTS);
+  });
+
+  // ---- /model ----
+  bot.command("model", async (ctx) => {
+    const arg = ctx.message.text.replace(/^\/model\s*/, "").trim().toLowerCase();
+    if (arg) {
+      try {
+        claudeAgent.setModel(arg);
+        const label = arg === "default" ? "default (CLI)" : arg;
+        await ctx.reply(`Model set to <b>${label}</b>.`, { parse_mode: "HTML" });
+      } catch {
+        await ctx.reply("Unknown model. Use: sonnet, opus, haiku, or default.");
+      }
+      return;
+    }
+
+    // No arg — show inline keyboard
+    const current = claudeAgent.modelOverride ?? "default";
+    const choices = ["sonnet", "opus", "haiku", "default"] as const;
+    const buttons = choices.map((m) => ({
+      text: m === current ? `\u{2705} ${m}` : m,
+      callback_data: `m:${m}`,
+    }));
+    await ctx.reply(`Current model: <b>${current}</b>`, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [buttons] },
+    });
+  });
+
+  // ---- /exit ----
+  bot.command("exit", async (ctx) => {
+    if (claudeAgent.running) {
+      claudeAgent.cancel();
+    }
+    await ctx.reply("\u{1f6d1} Bot shutting down\u{2026}");
+    setTimeout(() => process.exit(0), 500);
+  });
+
+  // ---- Model callback ----
+  bot.action(/^m:(.+)$/, async (ctx) => {
+    const alias = ctx.match[1];
+    try {
+      claudeAgent.setModel(alias);
+      const label = alias === "default" ? "default (CLI)" : alias;
+      await ctx.editMessageText(`Model set to <b>${label}</b>.`, { parse_mode: "HTML" });
+    } catch {
+      await ctx.answerCbQuery("Unknown model.");
+    }
   });
 
   // ---- Plain text → smart routing ----

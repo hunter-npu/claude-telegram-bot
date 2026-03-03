@@ -43,6 +43,7 @@ export class ClaudeAgent {
   private sessionManager: SessionManager;
   private abortController: AbortController | null = null;
   private _running = false;
+  private _modelOverride: string | undefined;
 
   constructor(
     permissionHandler: PermissionHandler,
@@ -54,6 +55,22 @@ export class ClaudeAgent {
 
   get running(): boolean {
     return this._running;
+  }
+
+  get modelOverride(): string | undefined {
+    return this._modelOverride;
+  }
+
+  /** Set model override. Accepts "sonnet", "opus", "haiku", or "default" (clears override). */
+  setModel(alias: string): void {
+    const lower = alias.toLowerCase();
+    if (lower === "default") {
+      this._modelOverride = undefined;
+    } else if (["sonnet", "opus", "haiku"].includes(lower)) {
+      this._modelOverride = lower;
+    } else {
+      throw new Error(`Unknown model alias: "${alias}". Use sonnet, opus, haiku, or default.`);
+    }
   }
 
   async execute(params: ExecuteParams): Promise<ExecuteResult> {
@@ -93,6 +110,10 @@ export class ClaudeAgent {
       };
       if (Object.keys(agents).length > 0) {
         options.agents = agents;
+      }
+
+      if (this._modelOverride) {
+        options.model = this._modelOverride;
       }
 
       const stream = query({
