@@ -82,13 +82,6 @@ export function formatResult(result: {
 
   if (result.subtype === "success") {
     lines.push("\u{2705} <b>Task completed</b>");
-    if (result.result) {
-      const text = stripAnsi(result.result);
-      if (text.trim()) {
-        lines.push("");
-        lines.push(escapeHtml(text));
-      }
-    }
   } else {
     lines.push(
       `\u{274c} <b>Task ended:</b> ${escapeHtml(result.subtype)}`
@@ -99,10 +92,8 @@ export function formatResult(result: {
   if (result.num_turns) stats.push(`${result.num_turns} turns`);
   if (result.duration_ms)
     stats.push(`${(result.duration_ms / 1000).toFixed(1)}s`);
-  // cost is informational only (not billed for Max subscribers)
   if (stats.length > 0) {
-    lines.push("");
-    lines.push(`\u{1f4ca} ${stats.join(" \u{00b7} ")}`);
+    lines[lines.length - 1] += ` \u{00b7} ${stats.join(" \u{00b7} ")}`;
   }
 
   return lines.join("\n");

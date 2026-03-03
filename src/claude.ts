@@ -230,6 +230,16 @@ export class ClaudeAgent {
         return { sessionId, success: false, error: "Cancelled by user" };
       }
       const errMsg = err instanceof Error ? err.message : String(err);
+
+      // Auto-retry: if resuming a stale session failed, start fresh
+      if (params.resumeSessionId && errMsg.includes("exited with code")) {
+        logConsole("[Auto-retry] Session resume failed, starting fresh\u{2026}");
+        this.sessionManager.clearCurrent();
+        this._running = false;
+        this.abortController = null;
+        return this.execute({ ...params, resumeSessionId: undefined });
+      }
+
       return { sessionId, success: false, error: errMsg };
     } finally {
       this._running = false;
