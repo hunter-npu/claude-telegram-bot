@@ -248,18 +248,13 @@ export class PermissionHandler {
     input: Record<string, unknown>,
     options: { signal: AbortSignal; toolUseID: string }
   ): Promise<PermissionResult> => {
-    // Auto-allow read-only / non-destructive tools
-    if (AUTO_ALLOW.has(toolName)) {
-      return { behavior: "allow", updatedInput: input };
-    }
-
     // AskUserQuestion → render as Telegram inline keyboard + console
     if (toolName === "AskUserQuestion") {
       return this.handleAskUserQuestion(input, options.toolUseID);
     }
 
-    // Everything else (Edit, Write, Bash, NotebookEdit, …) needs approval
-    return this.requestPermission(toolName, input, options.toolUseID);
+    // Auto-allow all tools (full permission mode)
+    return { behavior: "allow", updatedInput: input };
   };
 
   // ---- Permission confirmation for write tools ----------------------------

@@ -128,51 +128,86 @@ function createDualSender(
 }
 
 // ---------------------------------------------------------------------------
-// Fire-and-forget: run a Claude task without blocking the Telegraf handler
-// ---------------------------------------------------------------------------
-
-function runTask(
-  bot: Telegraf,
-  chatId: number,
-  claudeAgent: ClaudeAgent,
-  prompt: string,
-  resumeSessionId?: string,
-  agents?: Record<string, AgentConfig>
-): void {
-  const { sendUpdate, flush } = createDualSender(bot, chatId);
-
-  claudeAgent
-    .execute({ prompt, sendUpdate, flush, resumeSessionId, agents })
-    .then((result) => {
-      if (result.error) {
-        sendTelegram(
-          bot,
-          chatId,
-          `\u{274c} Error: ${escapeHtml(result.error)}`,
-          "HTML"
-        ).catch(() => {});
-      }
-    })
-    .catch((err) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      sendTelegram(
-        bot,
-        chatId,
-        `\u{274c} Unexpected error: ${escapeHtml(msg)}`,
-        "HTML"
-      ).catch(() => {});
-    });
-}
-
-// ---------------------------------------------------------------------------
 // setupBot — registers middleware and command handlers
 // ---------------------------------------------------------------------------
+
+interface QueuedTask {
+  prompt: string;
+  resumeSessionId?: string;
+  agents?: Record<string, AgentConfig>;
+  clearSession: boolean;
+}
 
 export function setupBot(
   bot: Telegraf,
   claudeAgent: ClaudeAgent,
   sessionManager: SessionManager
 ): void {
+  // ---- Message queue ----
+  const taskQueue: QueuedTask[] = [];
+
+  function runTask(
+    chatId: number,
+    prompt: string,
+    resumeSessionId?: string,
+    agents?: Record<string, AgentConfig>
+  ): void {
+    const { sendUpdate, flush } = createDualSender(bot, chatId);
+
+    claudeAgent
+      .execute({ prompt, sendUpdate, flush, resumeSessionId, agents })
+      .then((result) => {
+        if (result.error) {
+          sendTelegram(
+            bot,
+            chatId,
+            `\u{274c} Error: ${escapeHtml(result.error)}`,
+            "HTML"
+          ).catch(() => {});
+        }
+        // Process next queued task, if any
+        if (taskQueue.length > 0) {
+          const next = taskQueue.shift()!;
+          const preview = escapeHtml(next.prompt.slice(0, 60));
+          sendTelegram(
+            bot,
+            chatId,
+            `\u{25b6}\u{fe0f} Starting queued task: <i>${preview}${next.prompt.length > 60 ? "\u{2026}" : ""}</i>`,
+            "HTML"
+          ).catch(() => {});
+          if (next.clearSession) sessionManager.clearCurrent();
+          const resumeId = next.clearSession
+            ? undefined
+            : next.resumeSessionId ?? sessionManager.getCurrent()?.id;
+          runTask(chatId, next.prompt, resumeId, next.agents);
+        }
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        sendTelegram(
+          bot,
+          chatId,
+          `\u{274c} Unexpected error: ${escapeHtml(msg)}`,
+          "HTML"
+        ).catch(() => {});
+        // Still drain queue on error
+        if (taskQueue.length > 0) {
+          const next = taskQueue.shift()!;
+          const preview = escapeHtml(next.prompt.slice(0, 60));
+          sendTelegram(
+            bot,
+            chatId,
+            `\u{25b6}\u{fe0f} Starting queued task: <i>${preview}${next.prompt.length > 60 ? "\u{2026}" : ""}</i>`,
+            "HTML"
+          ).catch(() => {});
+          if (next.clearSession) sessionManager.clearCurrent();
+          const resumeId = next.clearSession
+            ? undefined
+            : next.resumeSessionId ?? sessionManager.getCurrent()?.id;
+          runTask(chatId, next.prompt, resumeId, next.agents);
+        }
+      });
+  }
   // ---- Auth middleware ----
   bot.use(async (ctx, next) => {
     if (ctx.from?.id !== config.allowedUserId) {
@@ -197,10 +232,12 @@ export function setupBot(
         "/switch &lt;id&gt; \u{2014} Switch to a previous session\n" +
         "/status \u{2014} View current session info\n" +
         "/cancel \u{2014} Cancel a running task\n" +
+        "/queue \u{2014} View or clear the message queue\n" +
         "/sessions \u{2014} List past sessions\n" +
         "/model [name] \u{2014} Show or switch model\n" +
         "/exit \u{2014} Shut down the bot\n\n" +
-        "You can also send plain text directly.",
+        "You can also send plain text directly.\n" +
+        "Messages sent while a task is running are queued automatically.",
       { parse_mode: "HTML" }
     );
   });
@@ -213,14 +250,15 @@ export function setupBot(
       return;
     }
     if (claudeAgent.running) {
-      await ctx.reply("\u{23f3} A task is already running. /cancel to abort.");
+      taskQueue.push({ prompt, clearSession: true });
+      await ctx.reply(`\u{1f4ec} Queued (position ${taskQueue.length}). Will run after the current task.`);
       return;
     }
 
     logConsole(`\n\x1b[1m[Telegram] /ask ${prompt}\x1b[0m`);
     sessionManager.clearCurrent();
     await ctx.reply("\u{1f504} Starting\u{2026}");
-    runTask(bot, ctx.chat.id, claudeAgent, prompt);
+    runTask(ctx.chat.id, prompt);
   });
 
   // ---- /chat ----
@@ -230,19 +268,20 @@ export function setupBot(
       await ctx.reply("Usage: /chat &lt;message&gt;", { parse_mode: "HTML" });
       return;
     }
-    if (claudeAgent.running) {
-      await ctx.reply("\u{23f3} A task is already running. /cancel to abort.");
-      return;
-    }
     const current = sessionManager.getCurrent();
     if (!current) {
       await ctx.reply("No active session. Use /ask to start one.");
       return;
     }
+    if (claudeAgent.running) {
+      taskQueue.push({ prompt: message, resumeSessionId: current.id, clearSession: false });
+      await ctx.reply(`\u{1f4ec} Queued (position ${taskQueue.length}). Will run after the current task.`);
+      return;
+    }
 
     logConsole(`\n\x1b[1m[Telegram] /chat ${message}\x1b[0m`);
     await ctx.reply("\u{1f504} Continuing\u{2026}");
-    runTask(bot, ctx.chat.id, claudeAgent, message, current.id);
+    runTask(ctx.chat.id, message, current.id);
   });
 
   // ---- /status ----
@@ -263,7 +302,11 @@ export function setupBot(
   // ---- /cancel ----
   bot.command("cancel", async (ctx) => {
     if (claudeAgent.cancel()) {
-      await ctx.reply("\u{1f6d1} Cancelling\u{2026}");
+      const queueNote =
+        taskQueue.length > 0
+          ? ` Queue has ${taskQueue.length} pending task(s). Use /queue clear to discard.`
+          : "";
+      await ctx.reply(`\u{1f6d1} Cancelling\u{2026}${queueNote}`);
     } else {
       await ctx.reply("No task running.");
     }
@@ -300,14 +343,15 @@ export function setupBot(
       return;
     }
     if (claudeAgent.running) {
-      await ctx.reply("\u{23f3} A task is already running. /cancel to abort.");
+      taskQueue.push({ prompt, clearSession: true });
+      await ctx.reply(`\u{1f4ec} Queued (position ${taskQueue.length}). Will run after the current task.`);
       return;
     }
 
     logConsole(`\n\x1b[1m[Telegram] /new ${prompt}\x1b[0m`);
     sessionManager.clearCurrent();
     await ctx.reply("\u{1f504} Starting fresh\u{2026}");
-    runTask(bot, ctx.chat.id, claudeAgent, prompt);
+    runTask(ctx.chat.id, prompt);
   });
 
   // ---- /switch ----
@@ -337,14 +381,38 @@ export function setupBot(
       return;
     }
     if (claudeAgent.running) {
-      await ctx.reply("\u{23f3} A task is already running. /cancel to abort.");
+      taskQueue.push({ prompt, clearSession: true, agents: DEFAULT_TEAM_AGENTS });
+      await ctx.reply(`\u{1f4ec} Queued (position ${taskQueue.length}). Will run after the current task.`);
       return;
     }
 
     logConsole(`\n\x1b[1m[Telegram] /team ${prompt}\x1b[0m`);
     sessionManager.clearCurrent();
     await ctx.reply("\u{1f504} Starting with agent team\u{2026}");
-    runTask(bot, ctx.chat.id, claudeAgent, prompt, undefined, DEFAULT_TEAM_AGENTS);
+    runTask(ctx.chat.id, prompt, undefined, DEFAULT_TEAM_AGENTS);
+  });
+
+  // ---- /queue ----
+  bot.command("queue", async (ctx) => {
+    const arg = ctx.message.text.replace(/^\/queue\s*/, "").trim().toLowerCase();
+    if (arg === "clear") {
+      const count = taskQueue.length;
+      taskQueue.length = 0;
+      await ctx.reply(count > 0 ? `\u{1f5d1}\u{fe0f} Cleared ${count} queued task(s).` : "Queue is already empty.");
+      return;
+    }
+    if (taskQueue.length === 0) {
+      await ctx.reply("\u{1f4ed} Queue is empty.");
+      return;
+    }
+    let text = `\u{1f4ec} <b>Queue (${taskQueue.length} task${taskQueue.length > 1 ? "s" : ""})</b>\n\n`;
+    taskQueue.forEach((t, i) => {
+      const preview = escapeHtml(t.prompt.slice(0, 80));
+      const suffix = t.prompt.length > 80 ? "\u{2026}" : "";
+      text += `${i + 1}. ${preview}${suffix}\n`;
+    });
+    text += "\nUse /queue clear to discard all queued tasks.";
+    await ctx.reply(text, { parse_mode: "HTML" });
   });
 
   // ---- /model ----
@@ -399,14 +467,15 @@ export function setupBot(
   bot.on("text", async (ctx) => {
     const text = ctx.message.text;
     if (text.startsWith("/")) return;
+    const current = sessionManager.getCurrent();
     if (claudeAgent.running) {
-      await ctx.reply("\u{23f3} A task is already running. /cancel to abort.");
+      taskQueue.push({ prompt: text, resumeSessionId: current?.id, clearSession: false });
+      await ctx.reply(`\u{1f4ec} Queued (position ${taskQueue.length}). Will run after the current task.`);
       return;
     }
 
     logConsole(`\n\x1b[1m[Telegram] ${text}\x1b[0m`);
-    const current = sessionManager.getCurrent();
     await ctx.reply(current ? "\u{1f504} Continuing\u{2026}" : "\u{1f504} Processing\u{2026}");
-    runTask(bot, ctx.chat.id, claudeAgent, text, current?.id);
+    runTask(ctx.chat.id, text, current?.id);
   });
 }

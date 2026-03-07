@@ -87,7 +87,8 @@ export class ClaudeAgent {
 
       const options: Record<string, unknown> = {
         cwd: config.workingDirectory,
-        permissionMode: "default",
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
         canUseTool: this.permissionHandler.canUseTool,
         abortController: this.abortController,
         settingSources: ext.settingSources,
