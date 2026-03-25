@@ -1,9 +1,21 @@
-import "dotenv/config";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import dotenv from "dotenv";
 
 // Capture the bot's own directory at module load time (before any chdir)
 const BOT_DIR = process.cwd();
+
+// Load instance-specific .env file if CCT_INSTANCE is set, otherwise load default .env
+const instanceName = process.env.CCT_INSTANCE;
+const envFile = instanceName
+  ? resolve(BOT_DIR, `.env.${instanceName}`)
+  : resolve(BOT_DIR, ".env");
+if (!instanceName || existsSync(envFile)) {
+  dotenv.config({ path: envFile });
+} else {
+  console.warn(`[config] Warning: .env.${instanceName} not found, falling back to .env`);
+  dotenv.config({ path: resolve(BOT_DIR, ".env") });
+}
 
 // ---------------------------------------------------------------------------
 // Environment config
@@ -100,7 +112,12 @@ export function loadExtendedConfig(): CctExtendedConfig {
     agents: {},
   };
 
-  const configPath = resolve(BOT_DIR, "cct.config.json");
+  const configFileName = instanceName
+    ? `cct.config.${instanceName}.json`
+    : "cct.config.json";
+  const configPath = existsSync(resolve(BOT_DIR, configFileName))
+    ? resolve(BOT_DIR, configFileName)
+    : resolve(BOT_DIR, "cct.config.json");
   try {
     const content = readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(content) as Partial<CctExtendedConfig>;

@@ -139,6 +139,58 @@ When Claude requests a write operation (editing files, running shell commands, e
 
 You can approve from either Telegram (tap the button) or the console (type `y`).
 
+## Running Multiple Instances
+
+You can run multiple bot instances on the same machine, each connected to a different Telegram bot, by using the `-i` / `--instance` flag.
+
+### 1. Create per-instance env files
+
+Each instance needs its own bot token. Copy `.env` for each bot and set a unique `TELEGRAM_BOT_TOKEN`:
+
+```bash
+cp .env .env.work     # edit: set TELEGRAM_BOT_TOKEN for "work" bot
+cp .env .env.personal # edit: set TELEGRAM_BOT_TOKEN for "personal" bot
+```
+
+`ALLOWED_USER_ID` can be the same in all files — it's just your own Telegram user ID.
+
+### 2. Launch with the instance flag
+
+```bash
+# macOS / Linux
+cd ~/project-a
+/path/to/claude-telegram-bot/cct.sh -i work
+
+# in another terminal
+cd ~/project-b
+/path/to/claude-telegram-bot/cct.sh -i personal
+```
+
+```cmd
+REM Windows
+cd C:\projects\project-a
+path\to\claude-telegram-bot\cct.bat -i work
+
+REM in another terminal
+cd C:\projects\project-b
+path\to\claude-telegram-bot\cct.bat -i personal
+```
+
+Each instance loads `.env.<name>` and operates independently in its own working directory.
+
+### 3. Optional: per-instance extended config
+
+If you need different MCP servers or agents per instance, create a matching config file:
+
+```
+cct.config.work.json
+cct.config.personal.json
+```
+
+If a per-instance config file is not found, the shared `cct.config.json` is used as a fallback.
+
+> **Note:** Omitting `-i` keeps the original behavior — loads `.env` and `cct.config.json` as before.
+
 ## Advanced Configuration
 
 Create `cct.config.json` in the bot directory to load additional plugins, MCP servers, or custom agents:
