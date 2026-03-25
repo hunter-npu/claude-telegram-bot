@@ -141,55 +141,54 @@ You can approve from either Telegram (tap the button) or the console (type `y`).
 
 ## Running Multiple Instances
 
-You can run multiple bot instances on the same machine, each connected to a different Telegram bot, by using the `-i` / `--instance` flag.
+You can run multiple bot instances on the same machine, each connected to a different Telegram bot. Use `--env` to point each instance at its own config file.
 
-### 1. Create per-instance env files
+### 1. Create env files for each bot
 
-Each instance needs its own bot token. Copy `.env` for each bot and set a unique `TELEGRAM_BOT_TOKEN`:
+Each instance needs its own bot token. The files can be named anything and placed anywhere:
 
 ```bash
-cp .env .env.work     # edit: set TELEGRAM_BOT_TOKEN for "work" bot
-cp .env .env.personal # edit: set TELEGRAM_BOT_TOKEN for "personal" bot
+cp .env ~/bots/work.env     # edit: set TELEGRAM_BOT_TOKEN for "work" bot
+cp .env ~/bots/personal.env # edit: set TELEGRAM_BOT_TOKEN for "personal" bot
 ```
 
 `ALLOWED_USER_ID` can be the same in all files — it's just your own Telegram user ID.
 
-### 2. Launch with the instance flag
+### 2. Launch with --env
 
 ```bash
 # macOS / Linux
 cd ~/project-a
-/path/to/claude-telegram-bot/cct.sh -i work
+/path/to/claude-telegram-bot/cct.sh --env ~/bots/work.env
 
 # in another terminal
 cd ~/project-b
-/path/to/claude-telegram-bot/cct.sh -i personal
+/path/to/claude-telegram-bot/cct.sh --env ~/bots/personal.env
 ```
 
 ```cmd
 REM Windows
 cd C:\projects\project-a
-path\to\claude-telegram-bot\cct.bat -i work
+path\to\claude-telegram-bot\cct.bat --env C:\bots\work.env
 
 REM in another terminal
 cd C:\projects\project-b
-path\to\claude-telegram-bot\cct.bat -i personal
+path\to\claude-telegram-bot\cct.bat --env C:\bots\personal.env
 ```
 
-Each instance loads `.env.<name>` and operates independently in its own working directory.
+Both absolute and relative paths are accepted. Relative paths are resolved from the directory where you run the command.
 
 ### 3. Optional: per-instance extended config
 
-If you need different MCP servers or agents per instance, create a matching config file:
+Use `--config` to point at a specific `cct.config.json`:
 
+```bash
+cct.sh --env ~/bots/work.env --config ~/bots/work-cct.config.json
 ```
-cct.config.work.json
-cct.config.personal.json
-```
 
-If a per-instance config file is not found, the shared `cct.config.json` is used as a fallback.
+If `--config` is omitted, falls back to `cct.config.json` in the bot directory.
 
-> **Note:** Omitting `-i` keeps the original behavior — loads `.env` and `cct.config.json` as before.
+> **Note:** Omitting `--env` keeps the original behavior — loads `.env` from the bot directory as before.
 
 ## Advanced Configuration
 

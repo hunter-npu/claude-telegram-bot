@@ -5,17 +5,9 @@ import dotenv from "dotenv";
 // Capture the bot's own directory at module load time (before any chdir)
 const BOT_DIR = process.cwd();
 
-// Load instance-specific .env file if CCT_INSTANCE is set, otherwise load default .env
-const instanceName = process.env.CCT_INSTANCE;
-const envFile = instanceName
-  ? resolve(BOT_DIR, `.env.${instanceName}`)
-  : resolve(BOT_DIR, ".env");
-if (!instanceName || existsSync(envFile)) {
-  dotenv.config({ path: envFile });
-} else {
-  console.warn(`[config] Warning: .env.${instanceName} not found, falling back to .env`);
-  dotenv.config({ path: resolve(BOT_DIR, ".env") });
-}
+// Load env file: CCT_ENV_FILE (absolute or relative path) or default .env in bot dir
+const envFile = process.env.CCT_ENV_FILE ?? resolve(BOT_DIR, ".env");
+dotenv.config({ path: envFile });
 
 // ---------------------------------------------------------------------------
 // Environment config
@@ -112,12 +104,8 @@ export function loadExtendedConfig(): CctExtendedConfig {
     agents: {},
   };
 
-  const configFileName = instanceName
-    ? `cct.config.${instanceName}.json`
-    : "cct.config.json";
-  const configPath = existsSync(resolve(BOT_DIR, configFileName))
-    ? resolve(BOT_DIR, configFileName)
-    : resolve(BOT_DIR, "cct.config.json");
+  // CCT_CONFIG_FILE may be an absolute or relative path; fall back to cct.config.json in bot dir
+  const configPath = process.env.CCT_CONFIG_FILE ?? resolve(BOT_DIR, "cct.config.json");
   try {
     const content = readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(content) as Partial<CctExtendedConfig>;

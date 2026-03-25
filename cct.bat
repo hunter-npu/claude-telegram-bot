@@ -2,14 +2,26 @@
 set CCT_WORK_DIR=%cd%
 
 :parse_args
-if "%~1"=="-i" (
-  set CCT_INSTANCE=%~2
+if "%~1"=="--env" (
+  set CCT_ENV_FILE=%~f2
   shift
   shift
   goto parse_args
 )
-if "%~1"=="--instance" (
-  set CCT_INSTANCE=%~2
+if "%~1"=="-e" (
+  set CCT_ENV_FILE=%~f2
+  shift
+  shift
+  goto parse_args
+)
+if "%~1"=="--config" (
+  set CCT_CONFIG_FILE=%~f2
+  shift
+  shift
+  goto parse_args
+)
+if "%~1"=="-c" (
+  set CCT_CONFIG_FILE=%~f2
   shift
   shift
   goto parse_args
